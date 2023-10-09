@@ -1,5 +1,6 @@
 import './style.css'
 import triangleShader from './shaders/triangle.wgsl?raw'
+import { rand } from './utils/rand'
 
 const canvas = document.createElement('canvas')
 canvas.className = 'canvas'
@@ -86,7 +87,7 @@ const pipeline = device.createRenderPipeline({
   },
 })
 
-const triangleCount = 1
+const triangleCount = 10
 const bufferSize = vertexStride * 3 * triangleCount // a triangle have 3 points
 
 const vertexBuffer = device.createBuffer({
@@ -96,11 +97,15 @@ const vertexBuffer = device.createBuffer({
 })
 const vertexArray = new Uint8Array(bufferSize)
 const vertexes = new Float32Array(vertexArray.buffer)
-vertexes.set([0.5, -0.5], 0)
-vertexes.set([-0.5, -0.5], 1 * vertexStride / 4)
-vertexes.set([0, 0.5], 2 * vertexStride / 4)
 
-const render = (now: number) => {
+for (let i = 0; i < triangleCount; i++) {
+  const offset = i * vertexStride * 3 / 4
+  vertexes.set([rand(-1, 1), rand(-1, 1)], offset + 0)
+  vertexes.set([rand(-1, 1), rand(-1, 1)], offset + 1 * vertexStride / 4)
+  vertexes.set([rand(-1, 1), rand(-1, 1)], offset + 2 * vertexStride / 4)
+}
+
+const render = () => {
   const encoder = device.createCommandEncoder()
   const pass = encoder.beginRenderPass({
     label: 'triangle render pass',
@@ -116,7 +121,7 @@ const render = (now: number) => {
   pass.setPipeline(pipeline)
   pass.setVertexBuffer(0, vertexBuffer)
   device.queue.writeBuffer(vertexBuffer, 0, vertexes)
-  pass.draw(3, 1)
+  pass.draw(3 * triangleCount, 1)
   pass.end()
   const commandBuffer = encoder.finish()
   device.queue.submit([commandBuffer])
