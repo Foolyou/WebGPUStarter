@@ -121,7 +121,7 @@ const render = () => {
   pass.setPipeline(pipeline)
   pass.setVertexBuffer(0, vertexBuffer)
   device.queue.writeBuffer(vertexBuffer, 0, vertexes)
-  pass.draw(3 * triangleCount, 1)
+  pass.draw(3 * triangleCount, triangleCount)
   pass.end()
   const commandBuffer = encoder.finish()
   device.queue.submit([commandBuffer])
