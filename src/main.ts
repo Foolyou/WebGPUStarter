@@ -6,6 +6,30 @@ const canvas = document.createElement('canvas')
 canvas.className = 'canvas'
 document.body.appendChild(canvas)
 
+const fpsViewer = document.createElement('div')
+fpsViewer.className = 'fps-viewer'
+document.body.appendChild(fpsViewer)
+
+let fps = 0
+let renderCount = 0
+let renderTime = performance.now()
+let lastRenderCount = 0
+let lastRenderTime = renderTime
+
+const updateFps = () => {
+  setTimeout(() => {
+    fps = (renderCount - lastRenderCount) / (renderTime - lastRenderTime) * 1000
+    if (isNaN(fps)) {
+      updateFps()
+      return
+    }
+    lastRenderCount = renderCount
+    lastRenderTime = renderTime
+    fpsViewer.innerText = `fps: ${fps}`
+    updateFps()
+  }, 1000)
+}
+
 const canvasRect = canvas.getBoundingClientRect()
 
 let canvasWidth = canvasRect.width * window.devicePixelRatio
@@ -34,6 +58,10 @@ if (!ctx) {
   throw new Error('WebGPU not supported')
 }
 
+if (!navigator.gpu) {
+  throw new Error('WebGPU not supported')
+}
+
 const adapter = await navigator.gpu.requestAdapter()
 if (!adapter) {
   throw new Error('cannot request a GPU adapter')
@@ -59,6 +87,7 @@ const shaderModule = device.createShaderModule({
 })
 
 const vertexStride = 2 * 4 // 2 floats, 4 bytes each
+const offsetStride = 2 * 4 // 2 floats, 4 bytes each
 
 const pipeline = device.createRenderPipeline({
   label: 'triangle render pipeline',
@@ -72,7 +101,16 @@ const pipeline = device.createRenderPipeline({
         arrayStride: vertexStride,
         attributes: [
           { shaderLocation: 0, offset: 0, format: 'float32x2' }
-        ]
+        ],
+        stepMode: 'vertex'
+      },
+      {
+        // offsets
+        arrayStride: offsetStride,
+        attributes: [
+          { shaderLocation: 1, offset: 0, format: 'float32x2' }
+        ],
+        stepMode: 'instance'
       }
     ]
   },
@@ -87,25 +125,38 @@ const pipeline = device.createRenderPipeline({
   },
 })
 
-const triangleCount = 10
-const bufferSize = vertexStride * 3 * triangleCount // a triangle have 3 points
+const triangleCount = 100
+const vertexBufferSize = vertexStride * 3 // a triangle have 3 points
+const offsetBufferSize = offsetStride * triangleCount
 
 const vertexBuffer = device.createBuffer({
   label: 'triangle vertex buffer',
-  size: bufferSize,
+  size: vertexBufferSize,
   usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
 })
-const vertexArray = new Uint8Array(bufferSize)
+const vertexArray = new Uint8Array(vertexBufferSize)
 const vertexes = new Float32Array(vertexArray.buffer)
+vertexes.set([rand(-0.1, 0.1), rand(-0.1, 0.1)], 0)
+vertexes.set([rand(-0.1, 0.1), rand(-0.1, 0.1)], 1)
+vertexes.set([rand(-0.1, 0.1), rand(-0.1, 0.1)], 2)
 
-for (let i = 0; i < triangleCount; i++) {
-  const offset = i * vertexStride * 3 / 4
-  vertexes.set([rand(-1, 1), rand(-1, 1)], offset + 0)
-  vertexes.set([rand(-1, 1), rand(-1, 1)], offset + 1 * vertexStride / 4)
-  vertexes.set([rand(-1, 1), rand(-1, 1)], offset + 2 * vertexStride / 4)
-}
+const offsetBuffer = device.createBuffer({
+  label: 'triangle offset buffer',
+  size: offsetBufferSize,
+  usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+})
+const offsetArray = new Uint8Array(offsetBufferSize)
+const offsets = new Float32Array(offsetArray.buffer)
 
-const render = () => {
+const render = (now: number) => {
+  renderTime = now
+  renderCount++
+
+  for (let i = 0; i < triangleCount; i++) {
+    const ofst = i * offsetStride / 4
+    offsets.set([rand(-0.9, 0.9), rand(-0.9, 0.9)], ofst)
+  }
+
   const encoder = device.createCommandEncoder()
   const pass = encoder.beginRenderPass({
     label: 'triangle render pass',
@@ -120,11 +171,15 @@ const render = () => {
   })
   pass.setPipeline(pipeline)
   pass.setVertexBuffer(0, vertexBuffer)
+  pass.setVertexBuffer(1, offsetBuffer)
   device.queue.writeBuffer(vertexBuffer, 0, vertexes)
-  pass.draw(3 * triangleCount, triangleCount)
+  device.queue.writeBuffer(offsetBuffer, 0, offsets)
+  pass.draw(3, triangleCount)
   pass.end()
   const commandBuffer = encoder.finish()
   device.queue.submit([commandBuffer])
+  requestAnimationFrame(render)
 }
 
+updateFps()
 requestAnimationFrame(render)
