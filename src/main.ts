@@ -1,85 +1,23 @@
 import './style.css'
 import triangleShader from './shaders/triangle.wgsl?raw'
 import { rand } from './utils/rand'
+import { autoResizeCanvas } from './utils/autoResizeCanvas'
+import { createFPSProbe } from './utils/fps'
+import { getGPUCanvasContext, getGPU, configureGPUCanvasContextWithDevice } from './webgpu/toolbox'
 
 const canvas = document.createElement('canvas')
 canvas.className = 'canvas'
 document.body.appendChild(canvas)
 
-const fpsViewer = document.createElement('div')
-fpsViewer.className = 'fps-viewer'
-document.body.appendChild(fpsViewer)
+const fpsProbe = createFPSProbe()
+document.body.appendChild(fpsProbe.view)
 
-let fps = 0
-let renderCount = 0
-let renderTime = performance.now()
-let lastRenderCount = 0
-let lastRenderTime = renderTime
+await autoResizeCanvas(canvas)
 
-const updateFps = () => {
-  setTimeout(() => {
-    fps = (renderCount - lastRenderCount) / (renderTime - lastRenderTime) * 1000
-    if (isNaN(fps)) {
-      updateFps()
-      return
-    }
-    lastRenderCount = renderCount
-    lastRenderTime = renderTime
-    fpsViewer.innerText = `fps: ${fps}`
-    updateFps()
-  }, 1000)
-}
+const ctx = getGPUCanvasContext(canvas)
+const { device, presentationFormat } = await getGPU()
 
-const canvasRect = canvas.getBoundingClientRect()
-
-let canvasWidth = canvasRect.width * window.devicePixelRatio
-let canvasHeight = canvasRect.height * window.devicePixelRatio
-
-canvas.width = canvasWidth
-canvas.height = canvasHeight
-
-const resizeObserver = new ResizeObserver((entries) => {
-  for (const entry of entries) {
-    if (entry.target === canvas) {
-      canvasWidth = entry.devicePixelContentBoxSize[0].inlineSize
-      canvasHeight = entry.devicePixelContentBoxSize[0].blockSize
-      canvas.width = canvasWidth
-      canvas.height = canvasHeight
-    }
-  }
-})
-
-resizeObserver.observe(canvas, {
-  box: 'device-pixel-content-box'
-})
-
-const ctx = canvas.getContext('webgpu')
-if (!ctx) {
-  throw new Error('WebGPU not supported')
-}
-
-if (!navigator.gpu) {
-  throw new Error('WebGPU not supported')
-}
-
-const adapter = await navigator.gpu.requestAdapter()
-if (!adapter) {
-  throw new Error('cannot request a GPU adapter')
-}
-
-const device = await adapter.requestDevice({
-  label: 'default gpu device'
-})
-if (!device) {
-  throw new Error('cannot request a GPU device')
-}
-
-const preferredCanvasFormat = navigator.gpu.getPreferredCanvasFormat()
-
-ctx.configure({
-  device,
-  format: preferredCanvasFormat
-})
+configureGPUCanvasContextWithDevice(ctx, device)
 
 const shaderModule = device.createShaderModule({
   label: 'triangle shaders',
@@ -119,7 +57,7 @@ const pipeline = device.createRenderPipeline({
     entryPoint: 'fs',
     targets: [
       {
-        format: preferredCanvasFormat
+        format: presentationFormat
       }
     ]
   },
@@ -137,8 +75,8 @@ const vertexBuffer = device.createBuffer({
 const vertexArray = new Uint8Array(vertexBufferSize)
 const vertexes = new Float32Array(vertexArray.buffer)
 vertexes.set([rand(-0.1, 0.1), rand(-0.1, 0.1)], 0)
-vertexes.set([rand(-0.1, 0.1), rand(-0.1, 0.1)], 1)
 vertexes.set([rand(-0.1, 0.1), rand(-0.1, 0.1)], 2)
+vertexes.set([rand(-0.1, 0.1), rand(-0.1, 0.1)], 4)
 
 const offsetBuffer = device.createBuffer({
   label: 'triangle offset buffer',
@@ -148,21 +86,20 @@ const offsetBuffer = device.createBuffer({
 const offsetArray = new Uint8Array(offsetBufferSize)
 const offsets = new Float32Array(offsetArray.buffer)
 
-const render = (now: number) => {
-  renderTime = now
-  renderCount++
+for (let i = 0; i < triangleCount; i++) {
+  const ofst = i * offsetStride / 4
+  offsets.set([rand(-0.9, 0.9), rand(-0.9, 0.9)], ofst)
+}
 
-  for (let i = 0; i < triangleCount; i++) {
-    const ofst = i * offsetStride / 4
-    offsets.set([rand(-0.9, 0.9), rand(-0.9, 0.9)], ofst)
-  }
+const render = (now: number) => {
+  fpsProbe.count(now)
 
   const encoder = device.createCommandEncoder()
   const pass = encoder.beginRenderPass({
     label: 'triangle render pass',
     colorAttachments: [
       {
-        clearValue: [0, 0, 0, 0],
+        clearValue: [1, 1, 1, 1],
         loadOp: 'clear',
         storeOp: 'store',
         view: ctx.getCurrentTexture().createView()
@@ -181,5 +118,5 @@ const render = (now: number) => {
   requestAnimationFrame(render)
 }
 
-updateFps()
 requestAnimationFrame(render)
+fpsProbe.start()
