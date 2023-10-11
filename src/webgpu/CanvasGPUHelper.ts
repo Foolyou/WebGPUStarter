@@ -255,7 +255,7 @@ class CanvasGPUHelper {
     return vertexBuffer
   }
 
-  updateVertexBufferData (buffer: ArrayBuffer, vertexBufferLayout: VertexBufferLayout, label: string, index: number, length: number, value: ArrayLike<number>) {
+  updateVertexBufferData (buffer: ArrayBuffer, vertexBufferLayout: VertexBufferLayout, label: string, index: number, value: ArrayLike<number>) {
     const { arrayStride, attributeLayout } = vertexBufferLayout
     const { typedArray, offset } = attributeLayout[label]
     new typedArray(buffer, arrayStride * index + offset).set(value)

@@ -62,13 +62,13 @@ const positionBuffer = canvasHelper.createVertexBuffer(positionBufferLayout, 'tr
 const instanceBuffer = canvasHelper.createVertexBuffer(instanceBufferLayout, 'triangle instance buffer of offset and color', instanceCount)
 
 const vertexView = new Uint8Array(positionBuffer.size)
-canvasHelper.updateVertexBufferData(vertexView.buffer, positionBufferLayout, 'position', 0, 3, [
+canvasHelper.updateVertexBufferData(vertexView.buffer, positionBufferLayout, 'position', 0, [
   // 1 组
   0.2, 0.2,
   -0.2, 0.2,
   0.2, -0.2,
 ])
-canvasHelper.updateVertexBufferData(vertexView.buffer, positionBufferLayout, 'position', 3, 3, [
+canvasHelper.updateVertexBufferData(vertexView.buffer, positionBufferLayout, 'position', 3, [
   // 2 组
   0.2, 0.2,
   -0.2, -0.2,
