@@ -1,4 +1,4 @@
-export function getGPUCanvasContext(canvas: HTMLCanvasElement | OffscreenCanvas): GPUCanvasContext {
+export function getGPUCanvasContext (canvas: HTMLCanvasElement | OffscreenCanvas): GPUCanvasContext {
   const ctx = canvas.getContext('webgpu')
   if (!ctx) {
     throw new Error('WebGPU not supported')
@@ -14,7 +14,7 @@ export async function getGPUDevice () {
   }
 
   const device = await adapter.requestDevice({
-    label: 'default gpu device'
+    label: 'default gpu device',
   })
   if (!device) {
     throw new Error('cannot request a GPU device')
@@ -30,6 +30,6 @@ export function getPresentationFormat () {
 export function configureGPUCanvasContextWithDevice (ctx: GPUCanvasContext, device: GPUDevice) {
   ctx.configure({
     device,
-    format: navigator.gpu.getPreferredCanvasFormat()
+    format: navigator.gpu.getPreferredCanvasFormat(),
   })
 }

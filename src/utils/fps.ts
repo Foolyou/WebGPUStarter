@@ -1,4 +1,4 @@
-export function createFPSProbe(options: {
+export function createFPSProbe (options: {
   updateInterval: number;
 } = { updateInterval: 100 }) {
   const fpsViewer = document.createElement('div')
@@ -24,7 +24,7 @@ export function createFPSProbe(options: {
 
   return {
     view: fpsViewer,
-    get fps() {
+    get fps () {
       return fps
     },
     count (time: number) {
@@ -33,6 +33,6 @@ export function createFPSProbe(options: {
     },
     start () {
       updateFps()
-    }
+    },
   }
 }

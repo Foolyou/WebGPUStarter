@@ -1,6 +1,6 @@
 import { getGPUDevice, getGPUCanvasContext, getPresentationFormat, configureGPUCanvasContextWithDevice } from './toolbox'
 import { makeDeferred } from '../utils/deferred'
-import { getVertexFormatSize, getVertexFormatTypedArray } from './vertex_format';
+import { VertexBufferLayout } from './layout';
 
 interface Size {
   width: number;
@@ -16,33 +16,16 @@ interface CanvasGPUHelperOptions {
   height?: number;
 }
 
-interface VertexBufferOptions {
-  stepMode: GPUVertexStepMode;
-  attributes: { label: string, shaderLocation: number, format: GPUVertexFormat }[];
-}
-
-interface RenderPipelineVertexOptions {
+interface RenderPipelineVertexOptions{
   module: GPUShaderModule;
   entryPoint: string;
-  buffers: VertexBufferOptions[];
+  buffers: VertexBufferLayout[];
 }
 
 interface RenderPipelineOptions {
   label: string;
   vertex: RenderPipelineVertexOptions;
   fragment?: GPUFragmentState;
-}
-
-interface AttributeLayout {
-  shaderLocation: number;
-  size: number;
-  offset: number;
-  typedArray: new (buffer: ArrayBuffer, offset: number) => Int8Array | Uint8Array | Int16Array | Uint16Array | Int32Array | Uint32Array | Float32Array;
-}
-
-interface VertexBufferLayout {
-  arrayStride: number;
-  attributeLayout: Record<string, AttributeLayout>
 }
 
 const helperMap = new Map<HTMLCanvasElement | OffscreenCanvas, CanvasGPUHelper>()
@@ -54,7 +37,7 @@ const observer = new ResizeObserver((entries) => {
       const helper = helperMap.get(canvas)!
       helper.changeSize({
         width: entry.devicePixelContentBoxSize[0].inlineSize,
-        height: entry.devicePixelContentBoxSize[0].blockSize
+        height: entry.devicePixelContentBoxSize[0].blockSize,
       })
     }
   }
@@ -84,7 +67,7 @@ class CanvasGPUHelper {
     this._resize = !!options.resize
     if (options.MSAA === true) {
       this._MSAA = {
-        count: 4
+        count: 4,
       }
     } else if (options.MSAA) {
       this._MSAA = options.MSAA
@@ -98,17 +81,17 @@ class CanvasGPUHelper {
       if (!options.width || !options.height) {
         this.changeSize({
           width: 300,
-          height: 150
+          height: 150,
         })
       } else {
         this.changeSize({
           width: options.width,
-          height: options.height
+          height: options.height,
         })
       }
     } else {
       observer.observe(this._canvas, {
-        box: 'device-pixel-content-box'
+        box: 'device-pixel-content-box',
       })
     }
   }
@@ -155,7 +138,7 @@ class CanvasGPUHelper {
     return this._MSAAView
   }
 
-  getPresentationFormat() {
+  getPresentationFormat () {
     return this._presentationFormat
   }
 
@@ -175,92 +158,80 @@ class CanvasGPUHelper {
     return this._ctx
   }
 
+  getDevice () {
+    return this._device
+  }
+
   getView () {
     return this._ctx.getCurrentTexture().createView()
   }
   /* getters end */
 
   /* pipeline begin */
-  createShaderModule(options: GPUShaderModuleDescriptor) {
+  createShaderModule (options: GPUShaderModuleDescriptor) {
     return this._device.createShaderModule(options)
   }
 
-  createRenderPipeline(options: RenderPipelineOptions) {
+  createRenderPipeline (options: RenderPipelineOptions) {
     const descriptor: GPURenderPipelineDescriptor = {
       layout: 'auto',
       multisample: {
-        count: this.getSampleCount()
+        count: this.getSampleCount(),
       },
       vertex: {
         module: options.vertex.module,
         entryPoint: options.vertex.entryPoint,
       },
-      fragment: options.fragment
+      fragment: options.fragment,
     }
-
-    const vertexBufferLayouts: VertexBufferLayout[] = []
 
     if (options.vertex.buffers) {
-      const buffers: GPUVertexBufferLayout[] = []
-      for (const bufferDesc of options.vertex.buffers) {
-        let arrayStride = 0
-        const attributes: GPUVertexAttribute[] = []
-        const attributeLayout: Record<string, AttributeLayout> = {}
-        for (const attributeDesc of bufferDesc.attributes) {
-          const size = getVertexFormatSize(attributeDesc.format)
-          const offset = arrayStride
-          attributes.push({
-            format: attributeDesc.format,
-            shaderLocation: attributeDesc.shaderLocation,
-            offset
-          })
-          attributeLayout[attributeDesc.label] = {
-            offset,
-            size,
-            shaderLocation: attributeDesc.shaderLocation,
-            typedArray: getVertexFormatTypedArray(attributeDesc.format)
-          }
-          arrayStride += size
-        }
-        buffers.push({
-          stepMode: bufferDesc.stepMode,
-          attributes,
-          arrayStride
-        })
-        vertexBufferLayouts.push({
-          arrayStride,
-          attributeLayout
-        })
-      }
-      descriptor.vertex.buffers = buffers
+      descriptor.vertex.buffers = options.vertex.buffers.map(buffer => buffer.layout)
     }
 
-    const pipeline = this._device.createRenderPipeline(descriptor)
-
-    return {
-      pipeline,
-      vertexBufferLayouts
-    }
+    return this._device.createRenderPipeline(descriptor)
   }
   /* pipeline end */
 
   /* vertex buffer start */
-  createVertexBuffer (vertexBufferLayout: VertexBufferLayout, label: string, count: number) {
+  createVertexBuffer (vertexBufferLayout: VertexBufferLayout, count: number) {
     const size = vertexBufferLayout.arrayStride * count
     const vertexBuffer = this._device.createBuffer({
       size,
       usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-      label
+      label: vertexBufferLayout.label,
     })
     return vertexBuffer
   }
-
-  updateVertexBufferData (buffer: ArrayBuffer, vertexBufferLayout: VertexBufferLayout, label: string, index: number, value: ArrayLike<number>) {
-    const { arrayStride, attributeLayout } = vertexBufferLayout
-    const { typedArray, offset } = attributeLayout[label]
-    new typedArray(buffer, arrayStride * index + offset).set(value)
-  }
   /* vertex buffer end */
+
+  /* render pass start */
+  getCanvasRenderPassDescriptor (label?: string): GPURenderPassDescriptor {
+    const msaaView = this.getMSAAView()
+    const canvasView = this._ctx.getCurrentTexture().createView()
+    let view: GPUTextureView | undefined
+    let resolveTarget: GPUTextureView | undefined
+    if (this.getSampleCount() > 1) {
+      view = msaaView ?? canvasView
+      resolveTarget = msaaView ? canvasView : undefined
+    } else {
+      view = canvasView
+      resolveTarget = undefined
+    }
+    return {
+      label,
+      colorAttachments: [
+        {
+          clearValue: [1, 1, 1, 1],
+          loadOp: 'clear',
+          storeOp: 'store',
+          view,
+          resolveTarget,
+        },
+      ],
+    }
+  }
+  /* render pass end */
 }
 
 export async function createCanvasGPUHelper (options: CanvasGPUHelperOptions) {

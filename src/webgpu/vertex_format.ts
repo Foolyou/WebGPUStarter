@@ -65,7 +65,7 @@ export function getVertexFormatSize (format: GPUVertexFormat) {
   }
 }
 
-export function getVertexFormatTypedArray (format: GPUVertexFormat) {
+export function getVertexFormatTypedArrayCtor (format: GPUVertexFormat) {
   switch (format) {
     case 'uint8x2':
       return Uint8Array
